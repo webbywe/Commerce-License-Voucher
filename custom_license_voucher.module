@@ -1,0 +1,266 @@
+<?php
+
+/**
+ * @file
+ * This module provides voucher functionality for ONS commerce functionality.
+ *
+ * @author William Estrada <william@prometsource.com>
+ */
+
+/**
+ * Implements hook_block_info().
+ */
+function custom_license_voucher_block_info() {
+  $blocks = array();
+  $blocks['custom_license_voucher'] = array(
+    'info' => t('Voucher entry block'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function custom_license_voucher_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'custom_license_voucher') . '/includes/views',
+  );
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function custom_license_voucher_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'custom_license_voucher':
+      $block['content'] = custom_license_voucher_block_content();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function custom_license_voucher_theme() {
+  return array(
+    'custom_license_voucher_usage_summary' => array(
+      'variables' => array(
+        'coupon_id' => NULL,
+        'details_link_text' => NULL,
+      ),
+    ),
+  );
+}
+
+/**
+ * Return the content for the voucher block.
+ *
+ * @return array
+ *   Returns the formatted output of the block.
+ */
+function custom_license_voucher_block_content() {
+  $output = drupal_get_form('custom_license_voucher_redeem_form');
+
+  return $output;
+}
+
+/**
+ * The form defined for the voucher block.
+ *
+ * @param array $form
+ *   Drupal form item.
+ * @param array $form_submit
+ *   Drupal submit array.
+ *
+ * @return mixed
+ *   A form array for rendering.
+ */
+function custom_license_voucher_redeem_form(array $form, array &$form_submit) {
+  $form['description'] = array(
+    '#markup' => 'If you received a voucher code from your employer or institution, please enter it here:',
+  );
+
+  $form['voucher'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Voucher Code'),
+    '#default_value' => '',
+    '#size' => 60,
+    '#maxlength' => 128,
+    '#required' => TRUE,
+  );
+
+  $form['submit'] = array('#type' => 'submit', '#value' => t('Apply'));
+
+  return $form;
+}
+
+/**
+ * Validate the voucher block.
+ *
+ * Implements hook_validate.
+ *
+ * @param array $form
+ *   Drupal form item.
+ * @param array $form_state
+ *   Drupal state array for values.
+ */
+function custom_license_voucher_redeem_form_validate(array $form, array $form_state) {
+  if ($form['#form_id'] != 'custom_license_voucher_redeem_form') {
+    return;
+  }
+
+  // Check validity of voucher submitted.
+  $voucher_code = $form_state['values']['voucher'];
+
+  if (!commerce_coupon_code_exists($voucher_code)
+    || ($coupon = commerce_coupon_load_by_code($voucher_code)) === FALSE
+  ) {
+    form_set_error('voucher', t('The Voucher Code is invalid.'));
+    return;
+  }
+
+  if ($coupon->status == 0) {
+    form_set_error('voucher', t('The Voucher Code is no longer active.'));
+  }
+
+  $coupon_wrapper = entity_metadata_wrapper('commerce_coupon', $coupon);
+
+  // Validate usage of the coupon.
+  $current_usage = commerce_coupon_usage_get_usage($coupon->coupon_id);
+  $max_usage = commerce_coupon_usage_get_max_usage($coupon->coupon_id);
+
+  if ($current_usage == $max_usage) {
+    form_set_error('voucher', t('The Voucher Code has no more uses available.'));
+    return;
+  }
+
+  // Validate the product coupon is assigned for.
+  if (!$coupon_wrapper->__isset('field_coupon_product')
+    || ($product = commerce_product_load($coupon_wrapper->field_coupon_product->value()->product_id)) == FALSE
+  ) {
+    form_set_error('voucher', t('The Subscription that the Voucher Code applies discount for does not exist.'));
+    return;
+  }
+}
+
+/**
+ * Submit the voucher block.
+ *
+ * Implements hook_submit.
+ *
+ * @param array $form
+ *   Drupal form item.
+ * @param array $form_state
+ *   Drupal state array for values.
+ */
+function custom_license_voucher_redeem_form_submit(array $form, array $form_state) {
+  global $user;
+
+  if ($form['#form_id'] != 'custom_license_voucher_redeem_form') {
+    return;
+  }
+
+  // Load the cart for the user.
+  // If one does not exist, create one to assign products to.
+  if (!$order = commerce_cart_order_load($user->uid)) {
+    $order = commerce_cart_order_new($user->uid);
+  }
+
+  // Load the product for the coupon voucher.
+  $voucher_code = $form_state['values']['voucher'];
+  $coupon_wrapper = entity_metadata_wrapper('commerce_coupon', commerce_coupon_load_by_code($voucher_code));
+  $coupon_product = commerce_product_load($coupon_wrapper->field_coupon_product->value()->product_id);
+  $coupon_product_wrapper = entity_metadata_wrapper('commerce_product', $coupon_product);
+  $product = commerce_product_load($coupon_product_wrapper->field_coupon_product->value()->product_id);
+
+  // Add the coupon to the cart.
+  // Do not add and give message if already been added.
+  if (commerce_coupon_code_is_in_order($voucher_code, $order)) {
+    drupal_set_message(t('The voucher has already been applied to the cart.'), 'warning');
+  }
+  else {
+    $coupon_error = '';
+    commerce_coupon_redeem_coupon_code($voucher_code, $order, $coupon_error);
+    drupal_set_message(t('The Voucher Code %code has been applied to the order and will be shown at checkout.',
+        array('%code' => $voucher_code))
+    );
+  }
+
+  // Add the product to the cart.
+  if (_custom_license_voucher_product_in_cart($product->product_id, entity_metadata_wrapper('commerce_order', $order))) {
+    drupal_set_message(t('The subscription has already been added to the cart.'));
+  }
+  else {
+    $line_item = commerce_product_line_item_new($product, 1);
+    commerce_cart_product_add($user->uid, $line_item);
+  }
+
+  // Go to /cart as default end of function execution.
+  // If product added to cart, rules will kick off and perform actions
+  // before this point such as the redirection.
+  drupal_goto('cart');
+}
+
+/**
+ * Helper function to check if product exists in cart.
+ *
+ * @param int $product_id
+ *   Id of the product.
+ * @param object $order_wrapper
+ *   Entity metdata wrapper for the order object.
+ *
+ * @return bool
+ *   True or False whether product is currently in cart.
+ */
+function _custom_license_voucher_product_in_cart($product_id, $order_wrapper) {
+  $in_cart = FALSE;
+  $product_ids = array();
+
+  foreach ($order_wrapper->commerce_line_items as $line_item_wrapper) {
+    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+      $product_ids[] = $line_item_wrapper->commerce_product->raw();
+    }
+  }
+
+  if (in_array($product_id, $product_ids)) {
+    $in_cart = TRUE;
+  }
+
+  return $in_cart;
+}
+
+/**
+ * Render a usage summary for a voucher.
+ *
+ * @param array $variables
+ *   Array containing coupon_id and details_link_text.
+ *
+ * @return string
+ *   Return the themed output to be rendered.
+ */
+function theme_custom_license_voucher_usage_summary(array $variables) {
+  $coupon_id = $variables['coupon_id'];
+  $link_text = $variables['details_link_text'];
+
+  if ($coupon_id) {
+    $usage = commerce_coupon_usage_get_usage($coupon_id);
+    $max_usage = commerce_coupon_usage_get_max_usage($coupon_id);
+
+    $output = array(t('Uses: @usage', array('@usage' => $usage)));
+    if ($max_usage) {
+      $output[] = t('Maximum uses: @max_usage', array('@max_usage' => $max_usage));
+    }
+    if ($link_text) {
+      $output[] = l($link_text, 'voucher/' . $coupon_id . '/usage', array('query' => drupal_get_destination()));
+    }
+
+    return implode('<br/>', $output);
+  }
+}

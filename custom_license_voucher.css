@@ -1,0 +1,55 @@
+/* DOCUMENT INFORMATION
+	- Document: Custom License Voucher CSS
+*/
+
+#custom-license-voucher-redeem-form {
+    background-color: #fff;
+    border: 1px solid #CDCDCD;
+    border-radius: 5px;
+    clear: both;
+    float: left;
+    padding: 5px 10px;
+    margin: 0 0 15px;
+}
+
+#custom-license-voucher-redeem-form .form-item-voucher {
+    float: left;
+    padding: 0.5em 1em 0 0;
+}
+
+#custom-license-voucher-redeem-form label {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #273E6B;
+}
+
+#custom-license-voucher-redeem-form input.form-text {
+    background: #F5F5F5 url("../img/input.png") repeat-x scroll left top;
+    width: 180px;
+}
+
+#custom-license-voucher-redeem-form input.form-submit {
+    background: #FF5011 none repeat scroll 0 0;
+    border: medium none;
+    border-radius: 3px;
+    color: #FFF;
+    display: inline-block;
+    font-family: "AllerBold", "Sans-Serif", "Arial";
+    font-size: 13px;
+    margin-top: 3.4em;
+    padding: 7px 12px 5px;
+    text-shadow: 1px 1px 1px #BF3C0D;
+    text-transform: uppercase;
+}
+
+#custom-license-voucher-redeem-form input.form-submit:hover {
+    background: #BF3C0D none repeat scroll 0 0;
+    color: #FFF;
+    text-decoration: none;
+}
+
+#custom-license-voucher-redeem-form .voucher-anon-login.form-submit {
+    display: block;
+    margin: 1em 0 1em 16em;
+}

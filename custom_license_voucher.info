@@ -1,0 +1,13 @@
+name = Custom License Voucher
+description = Main functionality for vouchers in the Commerce License
+package = Custom Commerce License
+core = 7.x
+version = "7.x-1.0"
+
+dependencies[] = ctools
+dependencies[] = views
+dependencies[] = commerce_coupon_usage
+
+files[] = includes/views/handlers/custom_license_voucher_views_handler_area_usage_summary.inc
+
+stylesheets[all][] = custom_license_voucher.css
